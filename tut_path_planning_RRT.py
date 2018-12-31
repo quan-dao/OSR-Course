@@ -166,8 +166,7 @@ class Tree(object):
 
 		return status, node_new
 		'''
-
-
+	
 	def extend(self, q, env):
 		node_nearest = self.nearestNeighbor(q)
 		status, node_new = self.steer(node_nearest, q, env)
@@ -176,8 +175,14 @@ class Tree(object):
 			self.addEdge(node_nearest, node_new)
 		return status
 		
-	def connectPlanner(self):
-		pass
+	def toCoordGraph(self):
+		graph = {}
+		for node in self.nodes_list:
+			graph[node.data] = []
+			childs_list = node.left + node.right
+			for child in childs_list:
+				graph[node.data].append(child.data)
+		return graph
 
 
 class rrtConnectPlanner(object):
@@ -222,9 +227,108 @@ class rrtConnectPlanner(object):
 
 	def path(self, tree_a, tree_b):
 		print "Bingoooo, 2 tree are connected"
+		print "tree a 's end node = ", tree_a.nodes_list[-1].data
+		print "tree b 's end node = ", tree_b.nodes_list[-1].data
 		tree_a.display('green')
 		tree_b.display('yellow')
-		
+		a_start_a = AStar(tree_a.toCoordGraph(), tree_a.root.data, tree_a.nodes_list[-1].data)
+		a_start_b = AStar(tree_b.toCoordGraph(), tree_b.root.data, tree_b.nodes_list[-1].data)
+		a_start_a.constructPath()
+		a_start_b.constructPath()
+
+
+class PriorityQueue(object):
+	def __init__(self):
+		self.queue = []
+
+	def insert(self, item):
+		'''
+		item = (vertex, cost)
+		'''
+		self.queue.append(item)
+
+	def isEmpty(self):
+		return len(self.queue) == 0
+
+	def dequeue(self):
+		try:
+			min_cost = 1e5
+			target = 0
+			for i, item in enumerate(self.queue):
+				if item[1] < min_cost:
+					min_cost = item[1]
+					target = i
+			dequeued_item = self.queue[i] 
+			del self.queue[i]
+			return dequeued_item
+		except Exception as e:
+			raise e
+
+
+class AStar(object):
+	"""docstring for AStar"""
+	def __init__(self, _graph, _start_coord, _goal_coord):
+		assert isinstance(_graph, dict)
+		assert isinstance(_start_coord, tuple)
+		assert isinstance(_goal_coord, tuple)
+		self.graph = _graph
+		self.cost_rec = {}  # list of (vertex, cost)
+		for v in self.graph.keys():
+			if v == start:
+				self.cost_rec[v] = 0
+			else:
+				self.cost_rec[v] = 1e5
+		self.predecessor = {}  # store element to construct path
+		self.start_coord = _start_coord
+		self.goal_coord = _goal_coord
+
+	def dist(self, v1, v2, manhattan=True):
+		return abs(v1[0] - v2[0]) + abs(v1[1] - v2[1])
+
+	def constructPath(self):
+		open_set = PriorityQueue()
+		open_set.insert((self.start_coord, 0))
+
+		reach = False
+		while not open_set.isEmpty() and not reach:
+			vertex_cost = open_set.dequeue()
+			v = vertex_cost[0]
+			cost = vertex_cost[1]
+			if v == self.goal_coord:
+				reach = True
+			else:
+				for v_prime in self.graph[v]:
+					cost_prime = cost + self.dist(v_prime, self.goal_coord)
+					if cost_prime < self.cost_rec[v_prime]: 
+						self.cost_rec[v_prime] = cost_prime
+						self.predecessor[v_prime] = v
+						open_set.insert((v_prime, cost_prime))
+		if reach:
+			print "Found a path !!!"
+			self.displayPath()
+		else:
+			print "Path not found"
+
+	def displayPath(self):
+		raw_input("Press Enter to display path")
+		# display path
+		reach_start = False
+		v_prime = self.goal_coord
+		while not reach_start:
+			try:
+				v = self.predecessor[v_prime]
+				pl.plot([v_prime[0], v[0]], [v_prime[1], v[1]], color="blue", linewidth=2)
+			except Exception as e:
+				raw_input("Encounter error, press Enter to escape")
+				raise e
+			# v = self.predecessor[v_prime]
+			# pl.plot([v_prime[0], v[0]], [v_prime[1], v[1]], color="blue", linewidth=2)
+			if v == start:
+				reach_start = True
+			else:
+				v_prime = v
+			
+						
 
 '''
 x_size = 10
