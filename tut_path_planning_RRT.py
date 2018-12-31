@@ -47,6 +47,7 @@ class Tree(object):
 	"""docstring for Tree"""
 	def __init__(self, _root, _nodes_list=[]):
 		assert _root in _nodes_list
+		assert isinstance(_root, Node)
 		self.nodes_list = _nodes_list
 		self.root = _root
 
@@ -74,7 +75,7 @@ class Tree(object):
 				node_nearest = node
 			
 			if min_dist < epsilon**2:
-				print "Bingoooo! Reached q"
+				# print "Bingoooo! Reached q"
 				reached = True
 			
 			if node.onNodeLeft(q):
@@ -83,11 +84,12 @@ class Tree(object):
 				open_set += node.right
 		return node_nearest  # this node has nothing but data (i.e. no parent, no child)
 
-	def display(self):
+	def display(self, node_color='green'):
 		open_set = [self.root]
 		while len(open_set) > 0:
 			node = open_set.pop()
-			pl.plot([node.data[0]], [node.data[1]], 'go', markersize=8)
+			if node.data != self.root.data:
+				pl.plot([node.data[0]], [node.data[1]], 'o', color=node_color, markersize=8)
 			childs_list = node.left + node.right
 			for child in childs_list:
 				pl.plot([node.data[0], child.data[0]], [node.data[1], child.data[1]], 'k-',linewidth=2)
@@ -123,7 +125,33 @@ class Tree(object):
 					alpha += step
 			return not cross_obs
 
+		if env.check_collision(q[0], q[1]):
+			return 'trapped', None
+
 		d = node_nearest.dist(q)
+		if d < r and lineCheck(node_nearest.data, q, env):
+			status = 'reached'
+			node_new = Node(q)
+		else:
+			beta = 1./10
+			step = beta
+			while beta < 1.:
+				# sampled
+				x_new, y_new = lineDistSample(node_nearest.data, q, beta)
+				if not lineCheck(node_nearest.data, (x_new, y_new), env):
+					beta -= step  # back to previous sample
+					break
+				else:
+					beta += step
+			if beta == 0.:
+				status = 'trapped'
+				node_new = None
+			else:
+				status = 'advanced'
+				x_new, y_new = lineDistSample(node_nearest.data, q, beta)
+				node_new = Node((x_new, y_new))
+		return status, node_new
+		'''
 		status = ''
 		if d < r:
 			node_new = Node(q)
@@ -137,17 +165,68 @@ class Tree(object):
 			status = 'trapped'
 
 		return status, node_new
+		'''
 
 
-	def expand(self, q):
+	def extend(self, q, env):
 		node_nearest = self.nearestNeighbor(q)
-		pass
+		status, node_new = self.steer(node_nearest, q, env)
+		if status is not 'trapped':
+			self.addNode(node_new)
+			self.addEdge(node_nearest, node_new)
+		return status
 		
 	def connectPlanner(self):
 		pass
+
+
+class rrtConnectPlanner(object):
+	"""docstring for rrtConnectPlanner"""
+	def __init__(self, _start_coord, _goal_coord, _env):
+		self.start = Node(_start_coord)
+		self.goal = Node(_goal_coord)
+		self.env = _env
+ 
+	def connect(self, tree_a, q):
+		assert isinstance(tree_a, Tree)
+		status = 'advanced'
+		while status == 'advanced':
+			status = tree_a.extend(q, env)
+			print '[connect] status = ', status,
+		return status
+
+	def connectPlanner(self):
+		tree_a = Tree(self.start, [self.start])
+		tree_b = Tree(self.goal, [self.goal])
+		trees_list = [tree_a, tree_b]
+		i = True
+		x_size = self.env.size_x
+		y_size = self.env.size_y
+		max_iter = 1200
+		for k in range(max_iter):
+			print "\niter %d:" % k
+			tree_a = trees_list[i]
+			tree_b = trees_list[not i]
+			q_rand = (np.random.rand() * x_size, np.random.rand() * y_size)
+			if not tree_a.extend(q_rand, self.env) == 'trapped':
+				q_new = tree_a.nodes_list[-1].data
+				connect_status = tree_b.extend(q_new, self.env)
+				print '[connect] status = ', connect_status,
+				if connect_status == 'reached':
+					return self.path(tree_a, tree_b)
+			# swap role of tree_a and tree_b
+			i = not i
+
+		tree_a.display('green')
+		tree_b.display('yellow')
+
+	def path(self, tree_a, tree_b):
+		print "Bingoooo, 2 tree are connected"
+		tree_a.display('green')
+		tree_b.display('yellow')
 		
 
-
+'''
 x_size = 10
 y_size = 6
 start = (x_start, y_start)
@@ -181,4 +260,15 @@ raw_input("Press Enter to display node_new")
 pl.plot([node_nearest.data[0]], [node_nearest.data[1]], 'yo', markersize=8)
 print "status: ", status
 pl.plot([node_new.data[0]], [node_new.data[1]], 'b*', markersize=12)
+raw_input("Press Enter to finish")
+'''
+
+start = (x_start, y_start)
+goal = (x_goal, y_goal)
+
+raw_input("Press Enter to find path")
+
+path_planner = rrtConnectPlanner(start, goal, env) 
+path_planner.connectPlanner()
+
 raw_input("Press Enter to finish")
