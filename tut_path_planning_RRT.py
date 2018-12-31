@@ -323,7 +323,7 @@ class AStar(object):
 				raise e
 			# v = self.predecessor[v_prime]
 			# pl.plot([v_prime[0], v[0]], [v_prime[1], v[1]], color="blue", linewidth=2)
-			if v == start:
+			if v == self.start_coord:
 				reach_start = True
 			else:
 				v_prime = v
