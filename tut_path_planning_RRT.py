@@ -2,6 +2,7 @@
 import numpy as np
 import pylab as pl
 import sys
+from tut_time_param import TimeStamp
 
 
 sys.path.append('~/ros/src/cri/osr_examples/scripts/')
@@ -233,8 +234,14 @@ class rrtConnectPlanner(object):
 		tree_b.display('yellow')
 		a_start_a = AStar(tree_a.toCoordGraph(), tree_a.root.data, tree_a.nodes_list[-1].data)
 		a_start_b = AStar(tree_b.toCoordGraph(), tree_b.root.data, tree_b.nodes_list[-1].data)
-		a_start_a.constructPath()
-		a_start_b.constructPath()
+		path_a = a_start_a.constructPath()
+		path_b = a_start_b.constructPath()
+		assert path_a is not None
+		assert path_b is not None
+		if tree_a.root.data == self.goal.data:
+			return path_b[:-1] + list(reversed(path_a))
+		else:
+			return path_a[:-1] + list(reversed(path_b))
 
 
 class PriorityQueue(object):
@@ -305,28 +312,33 @@ class AStar(object):
 						open_set.insert((v_prime, cost_prime))
 		if reach:
 			print "Found a path !!!"
-			self.displayPath()
+			path = self.displayPath()
 		else:
 			print "Path not found"
+			path = None
+		return path
 
 	def displayPath(self):
 		raw_input("Press Enter to display path")
 		# display path
 		reach_start = False
 		v_prime = self.goal_coord
+		path = [v_prime]
 		while not reach_start:
-			try:
-				v = self.predecessor[v_prime]
-				pl.plot([v_prime[0], v[0]], [v_prime[1], v[1]], color="blue", linewidth=2)
-			except Exception as e:
-				raw_input("Encounter error, press Enter to escape")
-				raise e
-			# v = self.predecessor[v_prime]
-			# pl.plot([v_prime[0], v[0]], [v_prime[1], v[1]], color="blue", linewidth=2)
+			# try:
+			# 	v = self.predecessor[v_prime]
+			# 	pl.plot([v_prime[0], v[0]], [v_prime[1], v[1]], color="blue", linewidth=2)
+			# except Exception as e:
+			# 	raw_input("Encounter error, press Enter to escape")
+			# 	raise e
+			v = self.predecessor[v_prime]
+			pl.plot([v_prime[0], v[0]], [v_prime[1], v[1]], color="blue", linewidth=2)
+			path.append(v)
 			if v == self.start_coord:
 				reach_start = True
 			else:
 				v_prime = v
+		return list(reversed(path))
 			
 						
 
@@ -373,6 +385,19 @@ goal = (x_goal, y_goal)
 raw_input("Press Enter to find path")
 
 path_planner = rrtConnectPlanner(start, goal, env) 
-path_planner.connectPlanner()
+path = path_planner.connectPlanner()
+
+raw_input("Press Enter to TimeStamp the path")
+time_stamp = TimeStamp(path, 2, [0.2, 0.2], [0.05, 0.05], 0.05)
+time_stamp.pathTimeStamp()
+pl.figure(2)
+pl.subplot(211)
+pl.plot(time_stamp.v_profile[0], 'b-', label='x_vel')
+pl.plot(time_stamp.v_profile[1], 'r--', label='y_vel')
+pl.legend()
+pl.subplot(212)
+pl.plot(time_stamp.a_profile[0], 'g-', label='x_acc')
+pl.plot(time_stamp.a_profile[1], 'y--', label='y_acc')
+pl.legend()
 
 raw_input("Press Enter to finish")
