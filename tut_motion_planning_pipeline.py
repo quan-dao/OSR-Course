@@ -56,14 +56,17 @@ def robotGrab(box_kinbody):
 	robot.Grab(box_kinbody)
 
 
-def robotRelease():
+def robotRelease(box_kinbody):
 	taskmanip.ReleaseFingers()
 	robot.WaitForController(0)
+	robot.ReleaseAllGrabbed()
+	# robot.WaitForController(0)
 
 
 def robotIK(Ttarget):
 	# solve IK for qgrasp
 	solutions = manipulator.FindIKSolutions(Ttarget, orpy.IkFilterOptions.CheckEnvCollisions)
+	# solutions = manipulator.FindIKSolutions(Ttarget, 0)
 	print "num solutions: ", solutions.shape
 	# choose closest solution
 	q_current = robot.GetActiveDOFValues()
@@ -96,7 +99,7 @@ def robotMove2Box(box_kinbody, grab=True, height_offset=0):
 	if grab:
 		robotGrab(box_kinbody)
 	else:
-		robotRelease()
+		robotRelease(box_kinbody)
 
 
 
@@ -120,8 +123,15 @@ ax.set_ylabel('Joint Values [rad]')
 canvas.print_figure('joint_values.png')
 '''
 
-robotMove2Box(boxes[0])
+robotMove2Box(boxes[1])
 raw_input("Press Enter to release at box2")
 robotMove2Box(boxes[2], False, 0.051)
+raw_input("Press Enter to pick up next box")
+# move robot to neutral place
+robotMoveIt(np.zeros(6))
+raw_input("wait")
+robotMove2Box(boxes[0])
+raw_input("Press Enter to release at box2")
+robotMove2Box(boxes[2], False, 0.102)
 
 raw_input("Press Enter to finish")
