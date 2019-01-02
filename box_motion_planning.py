@@ -69,20 +69,23 @@ boxes.sort(key=lambda box:box.GetTransform()[2, 3], reverse=True)
 # create the robot object
 robot = RobotWrapper("Denso", env)
 
-h_offset = 0.011
+h_offset_init = 0.011
+h_offset = h_offset_init
+# h_offset1 = h_offset_init
 delta_h_offset = 0.011
 # move first box to destination0
-# Ttarget_grab = box2Ttarget(boxes[0])
-# Ttarget_release = box2Ttarget(destination0, False, h_offset)
+# Ttarget_grab = box2Ttarget(boxes[1])
+# Ttarget_release = box2Ttarget(destination1, False, h_offset)
 
 # raw_input("=================displat boxes[0]")
-# box = boxes[0]
+# box = boxes[1]
+# env.Remove(boxes[0])
 # color = [0.6, 0.6, 0]
 # g = box.GetLinks()[0].GetGeometries()[0]
 # g.SetAmbientColor(color)
 # g.SetDiffuseColor(color)
 # print "box transform: \n", box.GetTransform()
-# # robot.testTtarget(Ttarget_grab)
+# robot.testTtarget(Ttarget_grab)
 # raw_input("wait")
 # move to box i
 # robot.move2Ttarget(Ttarget_grab)
@@ -95,34 +98,46 @@ delta_h_offset = 0.011
 
 raw_input("Press Enter to start")
 for i in range(20):
+    print "box index %d" % i
     box = boxes[i]
-    # create Ttarget
-    Ttarget_grab = box2Ttarget(box)
-    Ttarget_release = box2Ttarget(destination1, False, h_offset)
-    # move to box
-    robot.move2Ttarget(Ttarget_grab)
-    # pick up box
-    robot.pickUp(box)
-    # release at destination
-    robot.move2Ttarget(Ttarget_release)
-    robot.putDown(box)
-    # increase h
-    h_offset += delta_h_offset
-
-
-    raw_input("=================displat boxes[0]")
+    
+    # colorize
     color = [0.6, 0.6, 0]
     g = box.GetLinks()[0].GetGeometries()[0]
     g.SetAmbientColor(color)
     g.SetDiffuseColor(color)
-    print "box transform: \n", box.GetTransform()
 
-    g = boxes[i+1].GetLinks()[0].GetGeometries()[0]
-    g.SetAmbientColor(color)
-    g.SetDiffuseColor(color)
-    
+    # create Ttarget
+    Ttarget_grab = box2Ttarget(box)
+    Ttarget_release = box2Ttarget(destination1, False, h_offset)
+    # move to box
+    try:
+        robot.move2Ttarget(Ttarget_grab)
+    except Exception as e:
+        print "gripper pose:"
+        print robot.getEEPose()
+        print "Ttarget:"
+        print Ttarget_grab
+        robot.testTtarget(Ttarget_grab)
+        raw_input("wait!!!!")
+        robot.move2Ttarget(Ttarget_grab)
+        # raise e
+    # robot.move2Ttarget(Ttarget_grab)
+    # pick up box
+    robot.pickUp(box)
+    # release at destination
+    try:
+        robot.move2Ttarget(Ttarget_release)
+    except Exception as e:
+        raw_input("Press Enter to switch destination")
+        Ttarget_release = box2Ttarget(destination0, False, h_offset)
+        robot.move2Ttarget(Ttarget_release)
+        
+    # robot.move2Ttarget(Ttarget_release)
+    robot.putDown(box)
+    # increase h
+    h_offset += delta_h_offset
     raw_input("Press Enter to pick up next box")
-
 
 
 raw_input("Press Enter to finish")

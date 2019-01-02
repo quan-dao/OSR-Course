@@ -23,13 +23,18 @@ class RobotWrapper(object):
 		self.params = orpy.Planner.PlannerParameters()
 		self.params.SetRobotActiveJoints(self.robot)
 
-		# get robot controller
-		self.controller = self.robot.GetController()
+		# # get robot controller
+		# self.controller = self.robot.GetController()
 
 		# create interface for manipulation task
 		self.taskmanip = orpy.interfaces.TaskManipulation(self.robot)
 
 	def moveIt(self, qtarget):
+		# # create path planner
+		# self.planner = orpy.RaveCreatePlanner(self.env, 'birrt') # Using bidirectional RRT
+		# self.params = orpy.Planner.PlannerParameters()
+		# self.params.SetRobotActiveJoints(self.robot)
+
 		self.params.SetGoalConfig(qtarget)
 		self.params.SetPostProcessing('ParabolicSmoother', '<_nmaxiterations>40</_nmaxiterations>')
 		self.planner.InitPlan(self.robot, self.params)
@@ -37,6 +42,8 @@ class RobotWrapper(object):
 		traj = orpy.RaveCreateTrajectory(self.env, '')
 		self.planner.PlanPath(traj)
 		# Execute the trajectory
+		# get robot controller
+		self.controller = self.robot.GetController()
 		self.controller.SetPath(traj)
 		self.robot.WaitForController(0)
 
@@ -59,6 +66,8 @@ class RobotWrapper(object):
 		'''
 		solutions = self.manipulator.FindIKSolutions(Ttarget, orpy.IkFilterOptions.CheckEnvCollisions)
 		# solutions = self.manipulator.FindIKSolutions(Ttarget, 0)
+		# if len(solutions) == 0:
+		# 	solutions = self.manipulator.FindIKSolutions(Ttarget, 0)
 		# print "[DEBUG] num solutions: ", solutions.shape
 		# choose closest solution
 		q_current = self.robot.GetActiveDOFValues()
@@ -77,21 +86,28 @@ class RobotWrapper(object):
 
 	def testTtarget(self, Ttarget):
 		solutions = self.manipulator.FindIKSolutions(Ttarget, 0)
-		print "[DEBUG] num solutions: ", solutions.shape
-		self.robot.SetActiveDOFValues(solutions[0])
+		print "number of all possible solutions: ", solutions.shape
+		# self.robot.SetActiveDOFValues(solutions[0])
+
+	def getEEPose(self):
+		return self.manipulator.GetEndEffectorTransform()
+
 
 
 def box2Ttarget(box_kinbody, grab=True, height_offset=0.):
 	box_centroid = box_kinbody.ComputeAABB().pos()
-	print "grasp box at ", box_centroid
+	if grab:
+		print "grab box at ", box_centroid
+	else:
+		print "drop box at ", box_centroid
 	# Create grasp pose
 	Ttarget = box_kinbody.GetTransform()
 	# # rotate x & z around y by pi
-	Ttarget[:3, 0] *= -1.
-	# Ttarget[:3, 1] *= -1.  
+	# Ttarget[:3, 0] *= -1.
+	Ttarget[:3, 1] *= -1.  
 	Ttarget[:3, 2] *= -1.
 	Ttarget[:3, 3] = box_centroid
-	Ttarget[2, 3] += 0.01
+	Ttarget[2, 3] += 0.005
 	if not grab:
 		assert height_offset > 0.
 		Ttarget[2, 3] += height_offset
