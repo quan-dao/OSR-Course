@@ -188,6 +188,16 @@ for i in range(20):
             Tplace = transl(Tplace, np.array([0.01, 0, 0]))
             it += 1
 
+    if q_pick is None:
+        # no grasp, skip
+        print "[box %d] is skipped" % i
+        env.Remove(box)
+        if flag_dest1:
+            dest1_boxes_cnt -= 1
+        else:
+            dest0_boxes_cnt -= 1
+        continue
+
 
     print "[box %d] [Tpick] IK solution: " % i, q_pick
 
