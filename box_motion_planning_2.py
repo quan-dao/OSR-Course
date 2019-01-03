@@ -1,5 +1,6 @@
 import numpy as np
 import openravepy as orpy
+import pylab as pl
 
 
 np.random.seed(4)
@@ -67,17 +68,12 @@ ikmodel = orpy.databases.inversekinematics.InverseKinematicsModel(robot, iktype=
 if not ikmodel.load():
     ikmodel.autogenerate()
 
-# grab 1st box
-box = boxes[0]
-
 
 def boxDisplay(box):
 	color = [1, 0, 0.5]
 	g = box.GetLinks()[0].GetGeometries()[0]
 	g.SetAmbientColor(color)
 	g.SetDiffuseColor(color)
-
-boxDisplay(box)
 
 
 # create Tgrab
@@ -109,6 +105,12 @@ def rotY(T, theta):
 	return np.dot(T, rot)
 
 
+def transl(T, d):
+	_trans = np.eye(4)
+	_trans[:3, 3] = d
+	return np.dot(T, _trans)
+
+
 def box2Target(box, axis_idx=1):
 	T = rotByPi(box.GetTransform(), axis_idx)  # rotate around y
 	T[:3, 3] = box.ComputeAABB().pos()
@@ -124,7 +126,7 @@ def dest2Target(dest, h_offset, axis_idx=1):
 	T[2, 3] += h_offset
 	T[-1, -1] = 1
 	return T
-
+'''
 Tpick = box2Target(box)
 print "Tpick = \n", Tpick
 
@@ -152,34 +154,58 @@ orpy.raveLogInfo('Move to place location')
 manipprob.MoveManipulator(goal=sol2) # call motion planner with goal joint angles
 robot.WaitForController(0) # wait
 robot.Release(box)
+'''
+# ============================== for  boxes[5]
+n = 18
+box = boxes[n]
 
-# ============================== for 2nd box
-raw_input("Press Enter to continue with 2nd box")
-# env.Remove(box)
-box = boxes[1]
+del_boxes = [boxes[i] for i in range(n)]
+for del_box in del_boxes:
+	env.Remove(del_box)
+
+raw_input("Press Enter to continue with boxes[%d]"%n)
 boxDisplay(box)
-Tpick = box2Target(box)
+Tpick = box2Target(box, 1)  # rot around x (instead aroudn y)
 print "Tpick = \n", Tpick
 
 # Tplace = dest2Target(destination1, 0.011*2)
 Tplace = dest2Target(destination0, 0.011)
 print "Tplace = \n", Tplace
 
-Tee = manip.GetEndEffectorTransform()
-print "Tee = \n", Tee
+# Tee = manip.GetEndEffectorTransform()
+# print "Tee = \n", Tee
 
 it = 0
 sol = None
-while it < 20:
+while it < -3:
 	sol = manip.FindIKSolution(Tpick, orpy.IkFilterOptions.CheckEnvCollisions) # get collision-free solution
 	print "it = %d, Tpick: \n" % it, Tpick
 	if sol is not None:
 		print "Bingoooooooo"
 		break
 	# tilt gripper
-	Tpick = rotY(Tpick, 5. * np.pi / 180.)
+	# Tpick = rotY(Tpick, -1. * np.pi / 180.)
+	# Tpick = rotX(Tpick, -1. * np.pi / 180.)
+
+	# slide the grip
+	Tpick = transl(Tpick, np.array([0.01, 0, 0]))
+	Tplace = transl(Tplace, np.array([0.01, 0, 0]))
+	
+	# itt = 0
+	# while itt < 20:
+	# 	print "[%d] Try tilting" % it
+	# 	sol = manip.FindIKSolution(Tpick, orpy.IkFilterOptions.CheckEnvCollisions)
+	# 	if sol is not None:
+	# 		print "Bin!!!!!!!!!!!"
+	# 		break
+	# 	Tpick = rotY(Tpick, -5. * np.pi / 180.)
+	# 	itt += 1
+	# # Tpick = transl(Tpick, np.array([0, -0.01, 0]))
+	# Tplace = transl(Tplace, np.array([0, -0.01, 0]))
+	
 	it += 1
 
+sol = manip.FindIKSolution(Tpick, orpy.IkFilterOptions.CheckEnvCollisions) # get collision-free solution
 print "[Tgrab] IK solution: ", sol
 
 
@@ -190,9 +216,31 @@ manipprob.MoveManipulator(goal=sol) # call motion planner with goal joint angles
 robot.WaitForController(0) # wait
 robot.Grab(box)
 orpy.raveLogInfo('Move to place location')
-manipprob.MoveManipulator(goal=sol2) # call motion planner with goal joint angles
+traj = manipprob.MoveManipulator(goal=sol2, outputtrajobj=True) # call motion planner with goal joint angles
 robot.WaitForController(0) # wait
 robot.Release(box)
 
+spec = traj.GetConfigurationSpecification()
 
+
+times = np.arange(0, traj.GetDuration(), 0.01)
+qvect = np.zeros((len(times), robot.GetActiveDOF()))
+spec = traj.GetConfigurationSpecification()
+for i in range(len(times)):
+	trajdata = traj.Sample(times[i])
+	qvect[i,:] = spec.ExtractJointValues(trajdata, robot, manip.GetArmIndices(), 0)
+
+pl.figure(1)
+for i in range(6):
+	pl.plot(times, qvect[:, i])
+pl.show()
+
+angles = np.zeros(len(times))
+with robot:
+	for i in range(len(times)):
+		robot.SetActiveDOFValues(qvect[i, :])
+		Tee = manip.GetEndEffectorTransform()
+		angles[i] = np.arccos(Tee[3, 3])
+
+print "angles: ", angles
 raw_input("Press Enter to finish.")
