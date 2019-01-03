@@ -1,5 +1,7 @@
 import numpy as np
 import openravepy as orpy
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 
 np.random.seed(4)
@@ -67,6 +69,13 @@ ikmodel = orpy.databases.inversekinematics.InverseKinematicsModel(robot, iktype=
 if not ikmodel.load():
     ikmodel.autogenerate()
 
+# using link statistics
+lmodel = orpy.databases.linkstatistics.LinkStatisticsModel(robot)
+if not lmodel.load():
+    lmodel.autogenerate()
+lmodel.setRobotResolutions(0.01) # set resolution given smallest object is 0.01m
+lmodel.setRobotWeights() # set the weights for planning
+
 
 def boxDisplay(box):
     color = [1, 0, 0.5]
@@ -126,12 +135,18 @@ def dest2Target(dest, h_offset, axis_idx=1):
     return T
 
 
+# Initialize figure to plot tilt angle
+fig = Figure()
+canvas = FigureCanvas(fig)
+ax = fig.add_subplot(1,1,1)
+
 # grasp frist 5 boxes
 flag_dest1 = True
 h_offset = 0.011
 dest1_boxes_cnt = 1
 dest0_boxes_cnt = 1
-for i in range(20):
+n_boxes = 5
+for i in range(n_boxes):
     box = boxes[i]
     boxDisplay(box)
     # create pick and place pose
@@ -206,16 +221,42 @@ for i in range(20):
     print "[box %d] [Tplace] IK solution: " % i, q_place
 
     # Execute pick & place task
-    manipprob.MoveManipulator(goal=q_pick) # call motion planner with goal joint angles
+    manipprob.MoveManipulator(goal=q_pick, jitter=0.04) # call motion planner with goal joint angles
     robot.WaitForController(0) # wait
     robot.Grab(box)
     print "[box %d] Move to place location" % i
-    manipprob.MoveManipulator(goal=q_place) # call motion planner with goal joint angles
+    traj = manipprob.MoveManipulator(goal=q_place, jitter=0.04, outputtrajobj=True) # call motion planner with goal joint angles
     robot.WaitForController(0) # wait
     robot.Release(box)
     # switch destination
     flag_dest1 = not flag_dest1
     # raw_input("Press Enter to continue")
 
+    print "[box %d] Compute tilt angle" % i
+    # Get joints values
+    spec = traj.GetConfigurationSpecification()
+
+    times = np.arange(0, traj.GetDuration(), 0.01)
+    qvect = np.zeros((len(times), robot.GetActiveDOF()))
+    spec = traj.GetConfigurationSpecification()
+    for i_time in range(len(times)):
+        trajdata = traj.Sample(times[i_time])
+        qvect[i_time,:] = spec.ExtractJointValues(trajdata, robot, manip.GetArmIndices(), 0)
+    # Compute tilt angle
+    angles = np.zeros(len(times))
+    with robot:
+        for i_time in range(len(times)):
+            robot.SetActiveDOFValues(qvect[i_time, :])
+            Tee = manip.GetEndEffectorTransform()
+            angles[i_time] = np.arccos(Tee[2, 2])
+    # plot
+    ax.plot(times, angles * 180 / np.pi, label='box %d'%i)
+
+
+ax.grid(True)
+ax.legend()
+ax.set_xlabel('Time [s]')
+ax.set_ylabel('Tilt angles [deg]')
+canvas.print_figure('boxes_tilt_values.png')
 
 raw_input("Press Enter to finish")
