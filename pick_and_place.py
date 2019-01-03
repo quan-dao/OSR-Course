@@ -103,6 +103,12 @@ def rotY(T, theta):
     return np.dot(T, rot)
 
 
+def transl(T, d):
+    _trans = np.eye(4)
+    _trans[:3, 3] = d
+    return np.dot(T, _trans)
+
+
 def box2Target(box, axis_idx=1):
     T = rotByPi(box.GetTransform(), axis_idx)  # rotate around y
     T[:3, 3] = box.ComputeAABB().pos()
@@ -125,7 +131,7 @@ flag_dest1 = True
 h_offset = 0.011
 dest1_boxes_cnt = 1
 dest0_boxes_cnt = 1
-for i in range(5):
+for i in range(20):
     box = boxes[i]
     boxDisplay(box)
     # create pick and place pose
@@ -154,6 +160,34 @@ for i in range(5):
             # tilt gripper
             Tpick = rotY(Tpick, 5. * np.pi / 180.)
             it += 1
+    # still no solution for q_pick, change axis for generating original Tpick
+    if q_pick is None:
+        it = 0
+        Tpick = box2Target(box, 0)  # rot box frame around x (instead of y)
+        while it < 20:
+            q_pick = manip.FindIKSolution(Tpick, orpy.IkFilterOptions.CheckEnvCollisions) # get collision-free solution
+            print "[box %d] [q_pick] it = %d, Tpick: \n" % (i, it), Tpick
+            if q_pick is not None:
+                print "Bingo. Changing axis & tilting gripper success!!!"
+                break
+            # tilt gripper
+            Tpick = rotY(Tpick, 5. * np.pi / 180.)
+            it += 1
+    # still no solution, change pick up point
+    if q_pick is None:
+        it = 0
+        Tpick = box2Target(box)  # reset Tpick
+        while it < 3:
+            q_pick = manip.FindIKSolution(Tpick, orpy.IkFilterOptions.CheckEnvCollisions) # get collision-free solution
+            print "it = %d, Tpick: \n" % it, Tpick
+            if q_pick is not None:
+                print "Bingo. Slide pick up point success!!!"
+                break
+            # slide the grip
+            Tpick = transl(Tpick, np.array([0.01, 0, 0]))
+            Tplace = transl(Tplace, np.array([0.01, 0, 0]))
+            it += 1
+
 
     print "[box %d] [Tpick] IK solution: " % i, q_pick
 
@@ -171,7 +205,7 @@ for i in range(5):
     robot.Release(box)
     # switch destination
     flag_dest1 = not flag_dest1
-    raw_input("Press Enter to continue")
+    # raw_input("Press Enter to continue")
 
 
 raw_input("Press Enter to finish")
