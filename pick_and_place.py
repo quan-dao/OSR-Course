@@ -10,7 +10,7 @@ np.random.seed(4)
 env = orpy.Environment() # create the environment
 env.Load('/home/mquan/ros/src/cri/osr_course_pkgs/osr_openrave/worlds/pick_and_place.env.xml')
 env.SetViewer('qtcoin')
-# orpy.RaveSetDebugLevel(orpy.DebugLevel.Debug) # set output level to debug
+orpy.RaveSetDebugLevel(orpy.DebugLevel.Debug) # set output level to debug
 
 def create_box(T, color = [0, 0.6, 0]):
   box = orpy.RaveCreateKinBody(env, '')
@@ -139,6 +139,7 @@ def dest2Target(dest, h_offset, axis_idx=1):
 fig = Figure()
 canvas = FigureCanvas(fig)
 ax = fig.add_subplot(1,1,1)
+ax.set_ylim((0, 182))
 
 # grasp frist 5 boxes
 flag_dest1 = True
@@ -225,14 +226,24 @@ for i in range(n_boxes):
     robot.WaitForController(0) # wait
     robot.Grab(box)
     print "[box %d] Move to place location" % i
+
+    # traj = manipprob.MoveManipulator(goal=q_place, jitter=0.04, outputtrajobj=True) # call motion planner with goal joint angles
+    updir = np.array((0,0,1))
+    for k in range(100):
+        traj = manipprob.MoveHandStraight(direction=updir,stepsize=0.01,minsteps=1,maxsteps=10, outputtrajobj=True)
+        robot.WaitForController(0)
+    for k in range(30):
+        traj = manipprob.MoveHandStraight(direction=np.array((0,-1,0)),stepsize=0.01,minsteps=1,maxsteps=10, outputtrajobj=True)
+        robot.WaitForController(0)
     traj = manipprob.MoveManipulator(goal=q_place, jitter=0.04, outputtrajobj=True) # call motion planner with goal joint angles
-    robot.WaitForController(0) # wait
+    robot.WaitForController(0)
     robot.Release(box)
     # switch destination
     flag_dest1 = not flag_dest1
     # raw_input("Press Enter to continue")
 
     print "[box %d] Compute tilt angle" % i
+    print "Tee: \n", manip.GetEndEffectorTransform()
     # Get joints values
     spec = traj.GetConfigurationSpecification()
 
@@ -257,6 +268,6 @@ ax.grid(True)
 ax.legend()
 ax.set_xlabel('Time [s]')
 ax.set_ylabel('Tilt angles [deg]')
-canvas.print_figure('boxes_tilt_values.png')
+canvas.print_figure('boxes_tilt_values_3.png')
 
 raw_input("Press Enter to finish")
