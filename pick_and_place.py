@@ -178,10 +178,8 @@ for i in range(n_boxes):
 
     if flag_dest1:
         Tplace = dest2Target(destination1, h_offset * dest1_boxes_cnt)
-        dest1_boxes_cnt += 1  # increase number of boxes in destination1
     else:
         Tplace = dest2Target(destination0, h_offset * dest0_boxes_cnt)
-        dest0_boxes_cnt += 1
     print "[box %d] Tplace = \n" % i, Tplace
 
     # Find q_pick
@@ -233,10 +231,6 @@ for i in range(n_boxes):
         # no grasp, skip
         print "[box %d] is skipped" % i
         env.Remove(box)
-        if flag_dest1:
-            dest1_boxes_cnt -= 1
-        else:
-            dest0_boxes_cnt -= 1
         continue
 
 
@@ -245,16 +239,27 @@ for i in range(n_boxes):
     # Find q_place
     if gripper_tilt_angle > 0.:
         Tplace = rotY(Tplace, gripper_tilt_angle)
-    q_place = manip.FindIKSolution(Tplace, orpy.IkFilterOptions.CheckEnvCollisions) # get collision-free solution
-    
-    if gripper_tilt_angle > 0 and q_place is None:
-        if flag_dest1:
-            Tplace = dest2Target(destination1, h_offset * (dest1_boxes_cnt - 1), 0)
-        else:
-            Tplace = dest2Target(destination0, h_offset * (dest0_boxes_cnt - 1), 0)
-        Tplace = rotY(Tplace, gripper_tilt_angle)
-        q_place = manip.FindIKSolution(Tplace, orpy.IkFilterOptions.CheckEnvCollisions) # get collision-free solution
-    
+        q_place = manip.FindIKSolution(Tplace, orpy.IkFilterOptions.CheckEnvCollisions) 
+        if q_place is None:
+            if flag_dest1:
+                Tplace = dest2Target(destination1, h_offset * dest1_boxes_cnt, 0)
+            else:
+                Tplace = dest2Target(destination0, h_offset * dest0_boxes_cnt, 0)
+            Tplace = rotY(Tplace, gripper_tilt_angle)
+            q_place = manip.FindIKSolution(Tplace, orpy.IkFilterOptions.CheckEnvCollisions) 
+    else:
+        q_place = manip.FindIKSolution(Tplace, orpy.IkFilterOptions.CheckEnvCollisions)
+        if q_place is None:
+            # choose another target
+            flag_dest1 = not flag_dest1
+            if flag_dest1:
+                Tplace = dest2Target(destination1, h_offset * dest1_boxes_cnt)
+            else:
+                Tplace = dest2Target(destination0, h_offset * dest0_boxes_cnt)
+            print "[box %d] NEW Tplace = \n" % i, Tplace
+        q_place = manip.FindIKSolution(Tplace, orpy.IkFilterOptions.CheckEnvCollisions)
+
+        
     print "[box %d] [Tplace] IK solution: " % i, q_place
 
     # Execute pick & place task
@@ -279,7 +284,12 @@ for i in range(n_boxes):
     traj = manipprob.MoveManipulator(goal=q_place, jitter=0.04, outputtrajobj=True) # call motion planner with goal joint angles
     robot.WaitForController(0)
     robot.Release(box)
-    # switch destination
+
+    # inreaces moved boxes, then nswitch destination
+    if flag_dest1:
+        dest1_boxes_cnt += 1
+    else:
+        dest0_boxes_cnt += 1
     flag_dest1 = not flag_dest1
     # raw_input("Press Enter to continue")
 
