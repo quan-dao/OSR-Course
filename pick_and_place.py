@@ -5,13 +5,14 @@ from matplotlib.figure import Figure
 import time
 
 
-np.random.seed(4)
+# np.random.seed(4)
 
 # Environment stuff
 env = orpy.Environment() # create the environment
 env.Load('/home/mquan/ros/src/cri/osr_course_pkgs/osr_openrave/worlds/pick_and_place.env.xml')
 env.SetViewer('qtcoin')
 # orpy.RaveSetDebugLevel(orpy.DebugLevel.Debug) # set output level to debug
+
 
 def create_box(T, color = [0, 0.6, 0]):
   box = orpy.RaveCreateKinBody(env, '')
@@ -144,20 +145,41 @@ ax = fig.add_subplot(1,1,1)
 
 # grasp frist 5 boxes
 flag_dest1 = True
-h_offset = 0.011 + 0.005
+h_offset = 0.011 + 0.001
 dest1_boxes_cnt = 1
 dest0_boxes_cnt = 1
 
 alpha = 5. * np.pi / 180.
+
+pick_and_place_success = 0
 
 updir = np.array((0,0,1))
 closedir = np.array((-1, 0, 0))
 sidedir = np.array((0, -1, 0))
 
 constraint_success = 0
+'''
+Not constraint: 31
+Constraint: 29
+'''
+n_boxes = len(boxes)
 
-n_boxes = 17
-raw_input("Press Enter to start")
+flag_zero_tilt = ''
+_t = 0
+while flag_zero_tilt not in ['y', 'n']:
+    if _t > 0:
+        print "Invalid choice. Type y or n"
+    else:
+        _t = 1
+    flag_zero_tilt = raw_input("Zero tilt angle motion? (y/n) >>> ")
+
+if flag_zero_tilt == 'y':
+    flag_zero_tilt = True
+    raw_input("Press Enter to start zero tilt pick & place")
+else:
+    flag_zero_tilt = False
+    raw_input("Press Enter to start pick & place")
+
 start_time = time.time()
 for i in range(n_boxes):
     box = boxes[i]
@@ -235,7 +257,6 @@ for i in range(n_boxes):
         env.Remove(box)
         continue
 
-
     print "[box %d] [Tpick] IK solution: " % i, q_pick
 
     # Find q_place
@@ -252,7 +273,7 @@ for i in range(n_boxes):
     else:
         q_place = manip.FindIKSolution(Tplace, orpy.IkFilterOptions.CheckEnvCollisions)
         if q_place is None:
-            # choose another target
+            # choose another place location
             flag_dest1 = not flag_dest1
             if flag_dest1:
                 Tplace = dest2Target(destination1, h_offset * dest1_boxes_cnt)
@@ -264,45 +285,50 @@ for i in range(n_boxes):
         
     print "[box %d] [Tplace] IK solution: " % i, q_place
 
+    if q_place is None:
+        # no IK solutions for Tplace
+        print "[box %d] is skipped" % i
+        env.Remove(box)
+        continue
+
     # Execute pick & place task
     manipprob.MoveManipulator(goal=q_pick, jitter=0.04) # call motion planner with goal joint angles
     robot.WaitForController(0) # wait
     robot.Grab(box)
     
-    # traj = manipprob.MoveManipulator(goal=q_place, jitter=0.04, outputtrajobj=True) # call motion planner with goal joint angles
     print "[box %d] Pulling close" % i
-    for k in range(1):
-        manipprob.MoveHandStraight(direction=closedir,stepsize=0.01, minsteps=1, maxsteps=10)
-        robot.WaitForController(0)
+    manipprob.MoveHandStraight(direction=closedir,stepsize=0.01, minsteps=1, maxsteps=10)
+    robot.WaitForController(0)
     print "[box %d] Moving up" % i
-    for k in range(1):
-        manipprob.MoveHandStraight(direction=updir, stepsize=0.01, minsteps=1, maxsteps=20)
-        robot.WaitForController(0)
-    print "[box %d] Moving side" % i
-    for k in range(1):
-        manipprob.MoveHandStraight(direction=sidedir, stepsize=0.01, minsteps=1, maxsteps=30)
-        robot.WaitForController(0)
+    manipprob.MoveHandStraight(direction=updir, stepsize=0.01, minsteps=1, maxsteps=20)
+    robot.WaitForController(0)
+    print "[box %d] Moving to the side" % i
+    manipprob.MoveHandStraight(direction=sidedir, stepsize=0.01, minsteps=1, maxsteps=30)
+    robot.WaitForController(0)
     
-    print "[box %d] Move to place location" % i
-    # traj = manipprob.MoveManipulator(goal=q_place, jitter=0.04, outputtrajobj=True) # call motion planner with goal joint angles
-    constraintfreedoms = np.zeros(6)
-    constraintfreedoms[1] = 1  # no rotation around global y
-    constraintmatrix = np.linalg.inv(Tplace)
-    Tee = manip.GetEndEffectorTransform()
-    constrainttaskmatrix = np.dot(np.linalg.inv(Tee), Tplace)
-    try:
-        traj = manipprob.MoveToHandPosition(matrices=[Tplace], 
-                                            constraintfreedoms=constraintfreedoms,
-                                            constrainterrorthresh=0.01,
-                                            constrainttaskmatrix=constrainttaskmatrix,
-                                            constraintmatrix=constraintmatrix,
-                                            seedik=40,
-                                            maxtries=1,
-                                            maxiter=100,
-                                            outputtrajobj=True)
-        constraint_success += 1
-    except:
-        traj = manipprob.MoveManipulator(goal=q_place, jitter=0.04, outputtrajobj=True)
+    if flag_zero_tilt:
+        print "[box %d] Move to place location with zero tilt angle constraint" % i
+        constraintfreedoms = np.zeros(6)
+        constraintfreedoms[1] = 1  # no rotation around global y
+        constraintmatrix = np.linalg.inv(Tplace)
+        Tee = manip.GetEndEffectorTransform()
+        constrainttaskmatrix = np.dot(np.linalg.inv(Tee), Tplace)
+        try:
+            traj = manipprob.MoveToHandPosition(matrices=[Tplace], 
+                                                constraintfreedoms=constraintfreedoms,
+                                                constrainterrorthresh=0.01,
+                                                constrainttaskmatrix=constrainttaskmatrix,
+                                                constraintmatrix=constraintmatrix,
+                                                seedik=40,
+                                                maxtries=1,
+                                                maxiter=100,
+                                                outputtrajobj=True)
+            constraint_success += 1
+        except:
+            traj = manipprob.MoveManipulator(goal=q_place, jitter=0.04, outputtrajobj=True)
+    else:
+        print "[box %d] Move to place location with no constraint" % i
+        traj = manipprob.MoveManipulator(goal=q_place, jitter=0.04, outputtrajobj=True) 
     
     robot.WaitForController(0)
     robot.Release(box)
@@ -313,6 +339,7 @@ for i in range(n_boxes):
     else:
         dest0_boxes_cnt += 1
     flag_dest1 = not flag_dest1
+    pick_and_place_success += 1
     # raw_input("Press Enter to continue")
 
     print "[box %d] Compute tilt angle" % i
@@ -341,12 +368,17 @@ for i in range(n_boxes):
 
 
 print "[Time] time elapsed: ", time.time() - start_time
+print "Number of successful pick and place: ", pick_and_place_success
 
+# Plot tilt angles
 ax.grid(True)
 ax.legend()
 ax.set_xlabel('Time [s]')
 ax.set_ylabel('Tilt angles [deg]')
-canvas.print_figure('tilt_angles.png')
+if flag_zero_tilt:
+    canvas.print_figure('tilt_angles_constraint.png')
+    print "Number of boxes succeeded constraint: ", constraint_success
+else:
+    canvas.print_figure('tilt_angles_no_constraint.png')
 
-print "Number of boxes succeeded constraint: ", constraint_success
 raw_input("Press Enter to finish")
