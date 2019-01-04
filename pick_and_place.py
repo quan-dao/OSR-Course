@@ -2,6 +2,7 @@ import numpy as np
 import openravepy as orpy
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
+import time
 
 
 np.random.seed(4)
@@ -146,19 +147,29 @@ flag_dest1 = True
 h_offset = 0.011
 dest1_boxes_cnt = 1
 dest0_boxes_cnt = 1
-n_boxes = 20
+
+alpha = 5. * np.pi / 180.
+
+updir = np.array((0,0,1))
+closedir = np.array((-1, 0, 0))
+sidedir = np.array((0, -1, 0))
+
+n_boxes = 40
+raw_input("Press Enter to start")
+start_time = time.time()
 for i in range(n_boxes):
     box = boxes[i]
-    box_centroid = box.ComputeAABB().pos()
-    # Compare height of box i & i + 1, if equal, pick the closer one
-    next_box = boxes[i + 1]
-    next_box_centroid = next_box.ComputeAABB().pos()
-    if box_centroid[2] == next_box_centroid[2]:
-        if box_centroid[0] > next_box_centroid[0] :
-            print "[box %d] has same height as box %d, but further. Swap two boxes" % (i, i + 1)
-            # this box is further than the next box, swap two box
-            boxes[i + 1] = box
-            box = next_box
+    if i < 39:
+        box_centroid = box.ComputeAABB().pos()
+        # Compare height of box i & i + 1, if equal, pick the closer one
+        next_box = boxes[i + 1]
+        next_box_centroid = next_box.ComputeAABB().pos()
+        if box_centroid[2] == next_box_centroid[2]:
+            if box_centroid[0] > next_box_centroid[0] :
+                print "[box %d] has same height as box %d, but further. Swap two boxes" % (i, i + 1)
+                # this box is further than the next box, swap two box
+                boxes[i + 1] = box
+                box = next_box
 
     boxDisplay(box)
     # create pick and place pose
@@ -175,17 +186,19 @@ for i in range(n_boxes):
 
     # Find q_pick
     q_pick = manip.FindIKSolution(Tpick, orpy.IkFilterOptions.CheckEnvCollisions)
+    gripper_tilt_angle = 0
     if q_pick is None:
         it = 0
-        Tpick = rotY(Tpick, 5. * np.pi / 180.)
+        Tpick = rotY(Tpick, alpha)
         while it < 20:
             q_pick = manip.FindIKSolution(Tpick, orpy.IkFilterOptions.CheckEnvCollisions) # get collision-free solution
             print "[box %d] [q_pick] it = %d, Tpick: \n" % (i, it), Tpick
             if q_pick is not None:
                 print "Bingo. Tilting gripper success!!!"
+                gripper_tilt_angle = alpha * (it + 1)
                 break
             # tilt gripper
-            Tpick = rotY(Tpick, 5. * np.pi / 180.)
+            Tpick = rotY(Tpick, alpha)
             it += 1
     # still no solution for q_pick, change axis for generating original Tpick
     if q_pick is None:
@@ -196,9 +209,10 @@ for i in range(n_boxes):
             print "[box %d] [q_pick] it = %d, Tpick: \n" % (i, it), Tpick
             if q_pick is not None:
                 print "Bingo. Changing axis & tilting gripper success!!!"
+                gripper_tilt_angle = alpha * it
                 break
             # tilt gripper
-            Tpick = rotY(Tpick, 5. * np.pi / 180.)
+            Tpick = rotY(Tpick, alpha)
             it += 1
     # still no solution, change pick up point
     if q_pick is None:
@@ -229,7 +243,18 @@ for i in range(n_boxes):
     print "[box %d] [Tpick] IK solution: " % i, q_pick
 
     # Find q_place
+    if gripper_tilt_angle > 0.:
+        Tplace = rotY(Tplace, gripper_tilt_angle)
     q_place = manip.FindIKSolution(Tplace, orpy.IkFilterOptions.CheckEnvCollisions) # get collision-free solution
+    
+    if gripper_tilt_angle > 0 and q_place is None:
+        if flag_dest1:
+            Tplace = dest2Target(destination1, h_offset * (dest1_boxes_cnt - 1), 0)
+        else:
+            Tplace = dest2Target(destination0, h_offset * (dest0_boxes_cnt - 1), 0)
+        Tplace = rotY(Tplace, gripper_tilt_angle)
+        q_place = manip.FindIKSolution(Tplace, orpy.IkFilterOptions.CheckEnvCollisions) # get collision-free solution
+    
     print "[box %d] [Tplace] IK solution: " % i, q_place
 
     # Execute pick & place task
@@ -238,9 +263,6 @@ for i in range(n_boxes):
     robot.Grab(box)
     
     # traj = manipprob.MoveManipulator(goal=q_place, jitter=0.04, outputtrajobj=True) # call motion planner with goal joint angles
-    updir = np.array((0,0,1))
-    closedir = np.array((-1, 0, 0))
-    sidedir = np.array((0, -1, 0))
     print "[box %d] Pulling close" % i
     for k in range(1):
         manipprob.MoveHandStraight(direction=closedir,stepsize=0.01, minsteps=1, maxsteps=10)
@@ -250,7 +272,7 @@ for i in range(n_boxes):
         manipprob.MoveHandStraight(direction=updir, stepsize=0.01, minsteps=1, maxsteps=10)
         robot.WaitForController(0)
     print "[box %d] Moving side" % i
-    for k in range(30):
+    for k in range(15):
         manipprob.MoveHandStraight(direction=sidedir, stepsize=0.01, minsteps=1, maxsteps=10)
         robot.WaitForController(0)
     print "[box %d] Move to place location" % i
@@ -283,10 +305,13 @@ for i in range(n_boxes):
     ax.plot(times, angles * 180 / np.pi, label='box %d'%i)
 
 
+print "[Time] time elapsed: ", time.time() - start_time
+
 ax.grid(True)
 ax.legend()
 ax.set_xlabel('Time [s]')
 ax.set_ylabel('Tilt angles [deg]')
-canvas.print_figure('boxes_tilt_values_3.png')
+canvas.print_figure('tilt_angles.png')
+
 
 raw_input("Press Enter to finish")
