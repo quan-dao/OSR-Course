@@ -140,11 +140,11 @@ def dest2Target(dest, h_offset, axis_idx=1):
 fig = Figure()
 canvas = FigureCanvas(fig)
 ax = fig.add_subplot(1,1,1)
-ax.set_ylim((0, 182))
+# ax.set_ylim((0, 200))
 
 # grasp frist 5 boxes
 flag_dest1 = True
-h_offset = 0.011
+h_offset = 0.011 + 0.005
 dest1_boxes_cnt = 1
 dest0_boxes_cnt = 1
 
@@ -154,7 +154,9 @@ updir = np.array((0,0,1))
 closedir = np.array((-1, 0, 0))
 sidedir = np.array((0, -1, 0))
 
-n_boxes = 40
+constraint_success = 0
+
+n_boxes = 17
 raw_input("Press Enter to start")
 start_time = time.time()
 for i in range(n_boxes):
@@ -273,15 +275,35 @@ for i in range(n_boxes):
         manipprob.MoveHandStraight(direction=closedir,stepsize=0.01, minsteps=1, maxsteps=10)
         robot.WaitForController(0)
     print "[box %d] Moving up" % i
-    for k in range(30):
-        manipprob.MoveHandStraight(direction=updir, stepsize=0.01, minsteps=1, maxsteps=10)
+    for k in range(1):
+        manipprob.MoveHandStraight(direction=updir, stepsize=0.01, minsteps=1, maxsteps=20)
         robot.WaitForController(0)
     print "[box %d] Moving side" % i
-    for k in range(15):
-        manipprob.MoveHandStraight(direction=sidedir, stepsize=0.01, minsteps=1, maxsteps=10)
+    for k in range(1):
+        manipprob.MoveHandStraight(direction=sidedir, stepsize=0.01, minsteps=1, maxsteps=30)
         robot.WaitForController(0)
+    
     print "[box %d] Move to place location" % i
-    traj = manipprob.MoveManipulator(goal=q_place, jitter=0.04, outputtrajobj=True) # call motion planner with goal joint angles
+    # traj = manipprob.MoveManipulator(goal=q_place, jitter=0.04, outputtrajobj=True) # call motion planner with goal joint angles
+    constraintfreedoms = np.zeros(6)
+    constraintfreedoms[1] = 1  # no rotation around global y
+    constraintmatrix = np.linalg.inv(Tplace)
+    Tee = manip.GetEndEffectorTransform()
+    constrainttaskmatrix = np.dot(np.linalg.inv(Tee), Tplace)
+    try:
+        traj = manipprob.MoveToHandPosition(matrices=[Tplace], 
+                                            constraintfreedoms=constraintfreedoms,
+                                            constrainterrorthresh=0.01,
+                                            constrainttaskmatrix=constrainttaskmatrix,
+                                            constraintmatrix=constraintmatrix,
+                                            seedik=40,
+                                            maxtries=1,
+                                            maxiter=100,
+                                            outputtrajobj=True)
+        constraint_success += 1
+    except:
+        traj = manipprob.MoveManipulator(goal=q_place, jitter=0.04, outputtrajobj=True)
+    
     robot.WaitForController(0)
     robot.Release(box)
 
@@ -294,7 +316,7 @@ for i in range(n_boxes):
     # raw_input("Press Enter to continue")
 
     print "[box %d] Compute tilt angle" % i
-    print "Tee: \n", manip.GetEndEffectorTransform()
+    # print "Tee: \n", manip.GetEndEffectorTransform()
     # Get joints values
     spec = traj.GetConfigurationSpecification()
 
@@ -310,7 +332,10 @@ for i in range(n_boxes):
         for i_time in range(len(times)):
             robot.SetActiveDOFValues(qvect[i_time, :])
             Tee = manip.GetEndEffectorTransform()
-            angles[i_time] = np.arccos(Tee[2, 2])
+            if abs(Tee[2, 2]) > 1:
+                print "[box %d] Invalid z coordinate: "%i, Tee[:3, 2]
+                Tee[2, 2] = Tee[2, 2] *1. / abs(Tee[2, 2])
+            angles[i_time] = np.arccos(Tee[2, 2]) 
     # plot
     ax.plot(times, angles * 180 / np.pi, label='box %d'%i)
 
@@ -323,5 +348,5 @@ ax.set_xlabel('Time [s]')
 ax.set_ylabel('Tilt angles [deg]')
 canvas.print_figure('tilt_angles.png')
 
-
+print "Number of boxes succeeded constraint: ", constraint_success
 raw_input("Press Enter to finish")
