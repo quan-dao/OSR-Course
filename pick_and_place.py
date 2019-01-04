@@ -10,7 +10,7 @@ np.random.seed(4)
 env = orpy.Environment() # create the environment
 env.Load('/home/mquan/ros/src/cri/osr_course_pkgs/osr_openrave/worlds/pick_and_place.env.xml')
 env.SetViewer('qtcoin')
-orpy.RaveSetDebugLevel(orpy.DebugLevel.Debug) # set output level to debug
+# orpy.RaveSetDebugLevel(orpy.DebugLevel.Debug) # set output level to debug
 
 def create_box(T, color = [0, 0.6, 0]):
   box = orpy.RaveCreateKinBody(env, '')
@@ -146,9 +146,20 @@ flag_dest1 = True
 h_offset = 0.011
 dest1_boxes_cnt = 1
 dest0_boxes_cnt = 1
-n_boxes = 5
+n_boxes = 20
 for i in range(n_boxes):
     box = boxes[i]
+    box_centroid = box.ComputeAABB().pos()
+    # Compare height of box i & i + 1, if equal, pick the closer one
+    next_box = boxes[i + 1]
+    next_box_centroid = next_box.ComputeAABB().pos()
+    if box_centroid[2] == next_box_centroid[2]:
+        if box_centroid[0] > next_box_centroid[0] :
+            print "[box %d] has same height as box %d, but further. Swap two boxes" % (i, i + 1)
+            # this box is further than the next box, swap two box
+            boxes[i + 1] = box
+            box = next_box
+
     boxDisplay(box)
     # create pick and place pose
     Tpick = box2Target(box)
@@ -225,16 +236,24 @@ for i in range(n_boxes):
     manipprob.MoveManipulator(goal=q_pick, jitter=0.04) # call motion planner with goal joint angles
     robot.WaitForController(0) # wait
     robot.Grab(box)
-    print "[box %d] Move to place location" % i
-
+    
     # traj = manipprob.MoveManipulator(goal=q_place, jitter=0.04, outputtrajobj=True) # call motion planner with goal joint angles
     updir = np.array((0,0,1))
-    for k in range(100):
-        traj = manipprob.MoveHandStraight(direction=updir,stepsize=0.01,minsteps=1,maxsteps=10, outputtrajobj=True)
+    closedir = np.array((-1, 0, 0))
+    sidedir = np.array((0, -1, 0))
+    print "[box %d] Pulling close" % i
+    for k in range(1):
+        manipprob.MoveHandStraight(direction=closedir,stepsize=0.01, minsteps=1, maxsteps=10)
         robot.WaitForController(0)
+    print "[box %d] Moving up" % i
     for k in range(30):
-        traj = manipprob.MoveHandStraight(direction=np.array((0,-1,0)),stepsize=0.01,minsteps=1,maxsteps=10, outputtrajobj=True)
+        manipprob.MoveHandStraight(direction=updir, stepsize=0.01, minsteps=1, maxsteps=10)
         robot.WaitForController(0)
+    print "[box %d] Moving side" % i
+    for k in range(30):
+        manipprob.MoveHandStraight(direction=sidedir, stepsize=0.01, minsteps=1, maxsteps=10)
+        robot.WaitForController(0)
+    print "[box %d] Move to place location" % i
     traj = manipprob.MoveManipulator(goal=q_place, jitter=0.04, outputtrajobj=True) # call motion planner with goal joint angles
     robot.WaitForController(0)
     robot.Release(box)
