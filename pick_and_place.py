@@ -5,7 +5,7 @@ from matplotlib.figure import Figure
 import time
 
 
-# np.random.seed(4)
+np.random.seed(4)
 
 # Environment stuff
 env = orpy.Environment() # create the environment
@@ -121,7 +121,12 @@ def transl(T, d):
 
 
 def box2Target(box, axis_idx=1):
-    T = rotByPi(box.GetTransform(), axis_idx)  # rotate around y
+    assert axis_idx in [0, 1]
+    Tbox = box.GetTransform()
+    T = np.zeros(Tbox.shape)
+    T[:3, 1] = Tbox[:3, axis_idx]
+    T[:3, 2] = -Tbox[:3, 2]
+    T[:3, 0] = np.cross(T[:3, 1], T[:3, 2])    
     T[:3, 3] = box.ComputeAABB().pos()
     T[2, 3] += 0.005
     T[-1, -1] = 1
@@ -264,14 +269,32 @@ for i in range(n_boxes):
         Tplace = rotY(Tplace, gripper_tilt_angle)
         q_place = manip.FindIKSolution(Tplace, orpy.IkFilterOptions.CheckEnvCollisions) 
         if q_place is None:
+            # change axis
             if flag_dest1:
                 Tplace = dest2Target(destination1, h_offset * dest1_boxes_cnt, 0)
             else:
                 Tplace = dest2Target(destination0, h_offset * dest0_boxes_cnt, 0)
             Tplace = rotY(Tplace, gripper_tilt_angle)
             q_place = manip.FindIKSolution(Tplace, orpy.IkFilterOptions.CheckEnvCollisions) 
+        if q_place is None:
+            # change another place location
+            flag_dest1 = not flag_dest1
+            if flag_dest1:
+                Tplace = dest2Target(destination1, h_offset * dest1_boxes_cnt)
+            else:
+                Tplace = dest2Target(destination0, h_offset * dest0_boxes_cnt)
+            Tplace = rotY(Tplace, gripper_tilt_angle)
+            print "[box %d] NEW Tplace = \n" % i, Tplace
+            q_place = manip.FindIKSolution(Tplace, orpy.IkFilterOptions.CheckEnvCollisions) 
     else:
         q_place = manip.FindIKSolution(Tplace, orpy.IkFilterOptions.CheckEnvCollisions)
+        if q_place is None:
+            # change axis for generating Tplace
+            if flag_dest1:
+                Tplace = dest2Target(destination1, h_offset * dest1_boxes_cnt, 0)
+            else:
+                Tplace = dest2Target(destination0, h_offset * dest0_boxes_cnt, 0)
+            q_place = manip.FindIKSolution(Tplace, orpy.IkFilterOptions.CheckEnvCollisions)
         if q_place is None:
             # choose another place location
             flag_dest1 = not flag_dest1
