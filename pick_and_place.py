@@ -332,6 +332,7 @@ for i in range(n_boxes):
     if flag_zero_tilt:
         print "[box %d] Move to place location with zero tilt angle constraint" % i
         constraintfreedoms = np.zeros(6)
+        constraintfreedoms[0] = 1
         constraintfreedoms[1] = 1  # no rotation around global y
         constraintmatrix = np.linalg.inv(Tplace)
         Tee = manip.GetEndEffectorTransform()
