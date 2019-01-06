@@ -382,6 +382,8 @@ for i in range(n_boxes):
         for i_time in range(len(times)):
             robot.SetActiveDOFValues(qvect[i_time, :])
             Tee = manip.GetEndEffectorTransform()
+            # compensate for gripper tilt angle
+            Tee = rotY(Tee, -gripper_tilt_angle)
             if abs(Tee[2, 2]) > 1:
                 print "[box %d] Invalid z coordinate: "%i, Tee[:3, 2]
                 Tee[2, 2] = Tee[2, 2] *1. / abs(Tee[2, 2])
