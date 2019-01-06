@@ -23,7 +23,7 @@ The Rapidly explored Random Tree (RRT) is implemented in **tut_path_planning_RRT
 
 ![alt text][image2]
 
-*Fig.2 The path found by bidirectional RRT (green circles are nodes of each tree)*
+*Fig.2 The path found by bidirectional RRT (green and yellow circles are nodes of each tree)*
 
 ![alt text][image3]
 
